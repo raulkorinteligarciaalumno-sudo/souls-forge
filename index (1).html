@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SOULS FORGE</title>
+<style>
+:root{color-scheme:dark;--gold:#d18b52;--panel:#1b171a;--line:#65483b}
+*{box-sizing:border-box}body{margin:0;background:#100e11;color:#f4e7d4;font-family:system-ui,Arial,sans-serif}
+main{max-width:1000px;margin:auto;padding:14px}.top{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:12px}
+h1{font-size:clamp(22px,4vw,34px);letter-spacing:4px;margin:0}h1 span{color:var(--gold)}.muted{font-size:12px;color:#b6a49a}
+.panel{background:var(--panel);border:1px solid #49332d;border-radius:10px;padding:12px;margin:10px 0}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}button{background:#282025;color:#f4e7d4;border:1px solid var(--line);padding:10px 13px;border-radius:8px;font-weight:700;cursor:pointer}
+button.active,button:hover{background:#493022;border-color:var(--gold)}button.primary{background:#61351f;border-color:var(--gold)}
+canvas{width:100%;height:auto;display:block;background:#100e11;border:1px solid #63463b;border-radius:8px;touch-action:none}
+.hidden{display:none!important}.health{display:flex;gap:8px;flex-wrap:wrap}.healthbox{flex:1;min-width:140px;background:#20191b;border:1px solid #594039;border-radius:7px;padding:8px;font-size:12px}
+.bar{height:7px;background:#403033;margin:5px 0}.fill{height:100%;background:#6ce6f6}
+#bossbar{height:10px;background:#302426;border:1px solid #76513f;margin-top:6px}#bosshp{height:100%;width:100%;background:linear-gradient(90deg,#70231f,#d08a4b)}
+.controls{display:grid;grid-template-columns:1fr 1fr;gap:12px}.pad{display:grid;grid-template-columns:repeat(3,1fr);gap:4px}.pad button{padding:9px 4px}
+@media(max-width:520px){main{padding:8px}.controls{grid-template-columns:1fr 1fr}button{padding:9px 10px}}
+</style>
+</head>
+<body><main>
+<header class="top"><div><h1>SOULS <span>FORGE</span></h1><div class="muted">GUERREROS DE ACERO · TIERRAS MALDITAS</div></div><div id="status" class="muted">EN REPOSO</div></header>
+<section id="menu" class="panel">
+<b>Elige tu modo</b><div class="row" style="margin:8px 0"><button id="one" class="active">Un jugador</button><button id="two">Dos jugadores</button></div>
+<div id="desc" class="muted">Un guerrero contra la oscuridad.</div>
+<p><b>Arma del guerrero azul</b></p><div class="row"><button id="bp" class="active">⚡ Plasma</button><button id="bs">☄️ Escopeta infernal</button></div>
+<div id="redselect" class="hidden"><p><b>Arma del guerrero rojo</b></p><div class="row"><button id="rp" class="active">⚡ Plasma</button><button id="rs">☄️ Escopeta infernal</button></div></div>
+<p><button id="start" class="primary">⚔️ Comenzar aventura</button></p>
+<div class="muted">Azul: WASD + X. Rojo: flechas + Shift. En móvil usa los controles táctiles de abajo.</div>
+</section>
+<section id="hud" class="hidden"><div class="row"><span id="wave" class="muted">Oleada 1/20</span><span id="souls" class="muted">Almas: 0</span><span id="kills" class="muted">Derrotados: 0</span><button id="pause">Pausa</button><button id="reset">Menú</button></div>
+<div id="bossbox" class="hidden" style="margin:10px 0"><div id="bossname" style="text-align:center;font-weight:900;letter-spacing:2px;color:#d9a16b"></div><div id="bossbar"><div id="bosshp"></div></div></div>
+<div id="health" class="health" style="margin:10px 0"></div></section>
+<canvas id="game" width="800" height="460" aria-label="Juego Souls Forge"></canvas>
+<section id="overlay" class="panel"><h2 id="title" style="margin:0 0 6px">Las tierras olvidadas</h2><div id="msg" class="muted">Sobrevive a veinte oleadas. Un jefe te espera cada cinco.</div>
+<div id="shop" class="hidden"><p><b>⛩ Santuario de almas</b></p><div class="row"><button id="heal">Curación · 35 almas</button><button id="dmg">Daño + · 50 almas</button><button id="speed">Velocidad + · 40 almas</button></div><p><button id="next" class="primary">Siguiente oleada →</button></p></div>
+<button id="action" class="hidden">Volver al menú</button></section>
+<section class="panel"><b>Controles táctiles</b><div class="controls" style="margin-top:8px">
+<div><div style="color:#6ce6f6;font-size:12px;margin-bottom:5px">GUERRERO AZUL</div><div class="pad"><span></span><button data-key="w">▲</button><span></span><button data-key="a">◀</button><button data-key="s">▼</button><button data-key="d">▶</button></div><button data-key="x" style="width:100%;margin-top:5px">DISPARAR</button></div>
+<div id="redpad"><div style="color:#ff8b78;font-size:12px;margin-bottom:5px">GUERRERO ROJO</div><div class="pad"><span></span><button data-key="ArrowUp">▲</button><span></span><button data-key="ArrowLeft">◀</button><button data-key="ArrowDown">▼</button><button data-key="ArrowRight">▶</button></div><button data-key="Shift" style="width:100%;margin-top:5px">DISPARAR</button></div>
+</div></section>
+</main>
+<script>
+(()=>{'use strict';
+const $=id=>document.getElementById(id),canvas=$('game'),ctx=canvas.getContext('2d'),W=800,H=460;
+let mode=1,weapons={blue:'plasma',red:'plasma'},players=[],enemies=[],shots=[],particles=[],obstacles=[],keys={},touch={},wave=1,souls=0,kills=0,playing=false,paused=false,shopOpen=false,ended=false,boss=null,time=0,last=0,spawnClock=0,bonusDamage=0,bonusSpeed=0,shake=0;
+const rand=(a,b)=>a+Math.random()*(b-a),dist=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
+function setMode(n){mode=n;$('one').classList.toggle('active',n===1);$('two').classList.toggle('active',n===2);$('redselect').classList.toggle('hidden',n===1);$('redpad').classList.toggle('hidden',n===1);$('desc').textContent=n===1?'Un guerrero contra la oscuridad.':'Dos guerreros luchan juntos y comparten las almas.'}
+$('one').onclick=()=>setMode(1);$('two').onclick=()=>setMode(2);
+[['bp','blue','plasma','bs'],['bs','blue','shot','bp'],['rp','red','plasma','rs'],['rs','red','shot','rp']].forEach(([id,p,w,o])=>$(id).onclick=()=>{weapons[p]=w;$(id).classList.add('active');$(o).classList.remove('active')});
+function layout(){obstacles=[];[[125,100,95,20],[320,185,22,95],[510,95,110,20],[575,300,22,85],[210,340,100,20]].forEach(a=>obstacles.push({x:a[0],y:a[1],w:a[2],h:a[3]}))}
+function start(){players=[{id:'blue',x:mode===1?400:325,y:375,hp:100,max:100,r:14,color:'#6ce6f6',dark:'#234650',metal:'#8bced5',weapon:weapons.blue,cool:0,fx:0,fy:-1,alive:true},{id:'red',x:475,y:375,hp:100,max:100,r:14,color:'#ff8b78',dark:'#542c30',metal:'#c88873',weapon:weapons.red,cool:0,fx:0,fy:-1,alive:true}];if(mode===1)players.pop();enemies=[];shots=[];particles=[];wave=1;souls=0;kills=0;bonusDamage=0;bonusSpeed=0;time=0;spawnClock=0;boss=null;shopOpen=false;ended=false;paused=false;playing=true;keys={};touch={};layout();$('menu').classList.add('hidden');$('hud').classList.remove('hidden');$('overlay').classList.add('hidden');$('bossbox').classList.add('hidden');$('status').textContent='EN COMBATE';waveStart();updateHud()}
+$('start').onclick=start;
+$('reset').onclick=()=>{playing=false;shopOpen=false;ended=false;paused=false;$('menu').classList.remove('hidden');$('hud').classList.add('hidden');$('overlay').classList.remove('hidden');$('shop').classList.add('hidden');$('action').classList.add('hidden');$('bossbox').classList.add('hidden');$('title').textContent='Las tierras olvidadas';$('msg').textContent='Sobrevive a veinte oleadas. Un jefe te espera cada cinco.';$('status').textContent='EN REPOSO'};
+$('pause').onclick=()=>{if(!playing||shopOpen)return;paused=!paused;$('pause').textContent=paused?'Seguir':'Pausa';if(paused)message('PAUSA','El tiempo se detiene.');else $('overlay').classList.add('hidden')};
+const bossNames={5:'VARKHUL · CABALLERO CAÍDO',10:'ABADESA DE CENIZA',15:'DEVORADOR DE REYES',20:'REY SIN ALMA'};
+function waveStart(){enemies=[];shots=[];boss=null;layout();$('wave').textContent='Oleada '+wave+'/20';if(wave%5===0){let hp=340+wave*34;boss={x:400,y:100,r:30,hp,max:hp,speed:37+wave*.4,cool:1,name:bossNames[wave],type:'boss',phase:0};enemies.push(boss);$('bossbox').classList.remove('hidden');$('bossname').textContent=boss.name;message(boss.name,'Un alma antigua despierta. Aprende sus ataques y sobrevive.')}else{$('bossbox').classList.add('hidden');for(let i=0;i<4+wave*2;i++)spawnEnemy();$('overlay').classList.add('hidden')}spawnClock=0}
+function spawnEnemy(){let type=Math.random()<.18?'brute':Math.random()<.45?'wraith':'hollow',r=type==='brute'?17:type==='wraith'?10:12,hp=(type==='brute'?58:type==='wraith'?20:30)+wave*2;enemies.push({x:rand(30,770),y:rand(35,155),r,hp,max:hp,speed:(type==='brute'?31:type==='wraith'?74:48)+wave,type,cool:rand(.3,1),color:type==='brute'?'#b65b42':type==='wraith'?'#8c88a6':'#8c554b'})}
+function blocked(x,y,r){return x<r+5||x>W-r-5||y<r+5||y>H-r-5||obstacles.some(o=>{let a=Math.max(o.x,Math.min(x,o.x+o.w)),b=Math.max(o.y,Math.min(y,o.y+o.h));return(x-a)**2+(y-b)**2<r*r})}
+function burst(x,y,color,n=8){for(let i=0;i<n;i++){let a=rand(0,6.283),s=rand(20,145);particles.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,life:rand(.3,.9),max:.9,color,r:rand(1,3)})}}
+function shoot(p){let target=enemies.slice().sort((a,b)=>dist(a,p)-dist(b,p))[0],dx=target?target.x-p.x:p.fx,dy=target?target.y-p.y:p.fy,m=Math.hypot(dx,dy)||1;dx/=m;dy/=m;if(p.weapon==='shot'){for(let i=-2;i<=2;i++){let a=Math.atan2(dy,dx)+i*.16;shots.push({x:p.x,y:p.y,vx:Math.cos(a)*330,vy:Math.sin(a)*330,damage:13+bonusDamage,r:4,owner:p.id,life:.65,color:p.color})}p.cool=.72}else{shots.push({x:p.x,y:p.y,vx:dx*420,vy:dy*420,damage:23+bonusDamage,r:5,owner:p.id,life:1.5,color:p.color});p.cool=.23}}
+function updateHud(){$('souls').textContent='Almas: '+souls;$('kills').textContent='Derrotados: '+kills;$('health').innerHTML='';players.forEach(p=>{let e=document.createElement('div');e.className='healthbox';e.innerHTML='<b style="color:'+p.color+'">'+(p.id==='blue'?'GUERRERO AZUL':'GUERRERO ROJO')+'</b><div class="bar"><div style="height:100%;width:'+Math.max(0,p.hp/p.max*100)+'%;background:'+p.color+'"></div></div>'+Math.max(0,Math.ceil(p.hp))+' / '+p.max+' HP';$('health').appendChild(e)});if(boss)$('bosshp').style.width=Math.max(0,boss.hp/boss.max*100)+'%'}
+function message(title,msg){$('title').textContent=title;$('msg').textContent=msg;$('overlay').classList.remove('hidden')}
+function finish(title,msg){playing=false;ended=true;message(title,msg);$('action').textContent='Volver al menú';$('action').classList.remove('hidden');$('action').onclick=()=>$('reset').click()}
+function update(dt){time+=dt;players.forEach(p=>{if(!p.alive)return;let k=p.id==='blue'?['w','s','a','d','x']:['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Shift'],dx=0,dy=0;if(keys[k[0]]||touch[k[0]])dy--;if(keys[k[1]]||touch[k[1]])dy++;if(keys[k[2]]||touch[k[2]])dx--;if(keys[k[3]]||touch[k[3]])dx++;if(dx||dy){let m=Math.hypot(dx,dy);dx/=m;dy/=m;p.fx=dx;p.fy=dy}let nx=p.x+dx*(145+bonusSpeed)*dt,ny=p.y+dy*(145+bonusSpeed)*dt;if(!blocked(nx,p.y,p.r))p.x=nx;if(!blocked(p.x,ny,p.r))p.y=ny;p.cool=Math.max(0,p.cool-dt);if((keys[k[4]]||touch[k[4]])&&p.cool<=0)shoot(p)});
+spawnClock+=dt;if(!boss&&wave%5!==0&&enemies.length<4+wave*2&&spawnClock>1.8){spawnClock=0;spawnEnemy()}
+enemies.forEach(e=>{e.cool-=dt;let p=players.filter(p=>p.alive).sort((a,b)=>dist(a,e)-dist(b,e))[0];if(!p)return;let dx=p.x-e.x,dy=p.y-e.y,dd=Math.hypot(dx,dy)||1;if(e===boss){e.phase+=dt;if(dd>90){let nx=e.x+dx/dd*e.speed*dt,ny=e.y+dy/dd*e.speed*dt;if(!blocked(nx,e.y,e.r))e.x=nx;if(!blocked(e.x,ny,e.r))e.y=ny}if(e.cool<=0){e.cool=e.phase%7<3?.85:1.3;let n=e.phase%7<3?7:3;for(let i=0;i<n;i++){let a=Math.atan2(dy,dx)+(i-(n-1)/2)*.18;shots.push({x:e.x,y:e.y,vx:Math.cos(a)*180,vy:Math.sin(a)*180,damage:12,r:7,owner:'enemy',life:3,color:'#d65d48'})}}}else{if(dd>e.r+p.r+3){let nx=e.x+dx/dd*e.speed*dt,ny=e.y+dy/dd*e.speed*dt;if(!blocked(nx,e.y,e.r))e.x=nx;if(!blocked(e.x,ny,e.r))e.y=ny}if(dd<e.r+p.r+3&&e.cool<=0){e.cool=.85;p.hp-=e.type==='brute'?12:7;burst(p.x,p.y,'#b64c43',5)}}});
+shots.forEach(b=>{b.x+=b.vx*dt;b.y+=b.vy*dt;b.life-=dt;if(obstacles.some(o=>b.x>o.x&&b.x<o.x+o.w&&b.y>o.y&&b.y<o.y+o.h))b.life=0;if(b.owner==='enemy'){players.forEach(p=>{if(p.alive&&dist(b,p)<p.r+b.r){p.hp-=b.damage;b.life=0;burst(p.x,p.y,'#d65d48',7);shake=4}})}else{enemies.forEach(e=>{if(e.hp>0&&dist(b,e)<e.r+b.r){e.hp-=b.damage;b.life=0;burst(b.x,b.y,b.color,4);if(e.hp<=0){kills++;souls+=e===boss?100:e.type==='brute'?8:4;if(e===boss){boss=null;$('bossbox').classList.add('hidden')}burst(e.x,e.y,'#d9a16b',20)}}})}});
+shots=shots.filter(b=>b.life>0&&b.x>-20&&b.x<W+20&&b.y>-20&&b.y<H+20);enemies=enemies.filter(e=>e.hp>0);particles.forEach(p=>{p.x+=p.vx*dt;p.y+=p.vy*dt;p.life-=dt;p.vx*=.98;p.vy*=.98});particles=particles.filter(p=>p.life>0);players.forEach(p=>{if(p.hp<=0)p.alive=false});updateHud();
+if(players.every(p=>!p.alive)){finish('TU ALMA SE APAGA','Has derrotado '+kills+' enemigos. Inténtalo de nuevo.');return}
+if(!enemies.length&&!shopOpen&&playing){if(wave===20)finish('VICTORIA','El Rey sin Alma ha caído. Has conquistado las tierras malditas.');else openShop()}}
+function openShop(){playing=false;shopOpen=true;$('shop').classList.remove('hidden');message('SANTUARIO DE ALMAS','Gasta tus almas para prepararte para la siguiente oleada.')}
+function buy(cost,fn){if(souls<cost){$('msg').textContent='No tienes suficientes almas.';return}souls-=cost;fn();updateHud()}
+$('heal').onclick=()=>buy(35,()=>players.forEach(p=>p.hp=Math.min(p.max,p.hp+40)));$('dmg').onclick=()=>buy(50,()=>bonusDamage+=5);$('speed').onclick=()=>buy(40,()=>bonusSpeed+=12);$('next').onclick=()=>{wave++;shopOpen=false;playing=true;$('shop').classList.add('hidden');$('overlay').classList.add('hidden');$('action').classList.add('hidden');waveStart()};
+function poly(points,fill,stroke,lw=1){ctx.beginPath();points.forEach((p,i)=>i?ctx.lineTo(p[0],p[1]):ctx.moveTo(p[0],p[1]));ctx.closePath();ctx.fillStyle=fill;ctx.fill();if(stroke){ctx.strokeStyle=stroke;ctx.lineWidth=lw;ctx.stroke()}}
+function robot(p){ctx.save();ctx.translate(p.x,p.y);let c=p.color,dark=p.dark,metal=p.metal;
+ctx.fillStyle='#080708';ctx.beginPath();ctx.ellipse(0,17,18,6,0,0,7);ctx.fill();
+ctx.fillStyle='#302b30';ctx.fillRect(-11,5,8,13);ctx.fillRect(3,5,8,13);ctx.strokeStyle='#81736a';ctx.lineWidth=1.5;ctx.strokeRect(-11,5,8,13);ctx.strokeRect(3,5,8,13);
+ctx.fillStyle=dark;ctx.fillRect(-13,14,11,6);ctx.fillRect(2,14,11,6);ctx.shadowBlur=8;ctx.shadowColor=c;ctx.fillStyle=c;ctx.fillRect(-11,15,6,2);ctx.fillRect(4,15,6,2);ctx.shadowBlur=0;
+ctx.fillStyle='#393438';ctx.fillRect(-16,-9,5,19);ctx.fillStyle=metal;ctx.fillRect(-15,-7,3,4);ctx.fillStyle=c;ctx.fillRect(-15,0,3,5);
+poly([[-10,-11],[-7,-16],[7,-16],[11,-10],[9,5],[5,11],[-6,11],[-10,5]],dark,metal,1.5);poly([[-7,-10],[0,-13],[7,-10],[6,1],[0,6],[-6,1]],'#25272b',c,1);
+ctx.shadowBlur=12;ctx.shadowColor=c;ctx.fillStyle=c;ctx.beginPath();ctx.arc(0,-2,3.2,0,7);ctx.fill();ctx.shadowBlur=0;
+ctx.fillStyle=metal;ctx.fillRect(-7,5,4,2);ctx.fillRect(3,5,4,2);
+poly([[-11,-11],[-18,-9],[-19,-3],[-14,1],[-9,-3]],dark,metal,1.5);poly([[11,-11],[18,-9],[19,-3],[14,1],[9,-3]],dark,metal,1.5);
+ctx.fillStyle=c;ctx.fillRect(-17,-7,4,2);ctx.fillRect(13,-7,4,2);ctx.fillStyle='#393238';ctx.fillRect(-17,1,5,8);ctx.fillRect(12,1,5,8);ctx.strokeStyle=metal;ctx.strokeRect(-17,1,5,8);ctx.strokeRect(12,1,5,8);
+ctx.fillStyle='#6b5a55';ctx.fillRect(-4,-19,8,5);poly([[-12,-19],[-10,-27],[-5,-32],[5,-32],[10,-27],[12,-19],[7,-13],[-7,-13]],'#39363b',metal,1.7);poly([[-7,-30],[-4,-35],[0,-38],[4,-35],[7,-30]],dark,metal,1.2);poly([[-9,-25],[-5,-29],[5,-29],[9,-25],[7,-20],[-7,-20]],'#10171b',c,1);
+ctx.shadowBlur=13;ctx.shadowColor=c;ctx.fillStyle=c;ctx.fillRect(-7,-25,5,2.5);ctx.fillRect(2,-25,5,2.5);ctx.shadowBlur=0;poly([[-6,-19],[6,-19],[4,-15],[0,-14],[-4,-15]],dark,metal,1);
+ctx.strokeStyle=metal;ctx.lineWidth=1.5;ctx.beginPath();ctx.moveTo(10,-27);ctx.lineTo(14,-32);ctx.stroke();ctx.fillStyle=c;ctx.beginPath();ctx.arc(14,-33,1.8,0,7);ctx.fill();
+ctx.save();ctx.translate(0,11);ctx.rotate(Math.atan2(p.fy,p.fx));ctx.fillStyle='#17191d';ctx.fillRect(-2,-3,18,6);ctx.fillStyle=metal;ctx.fillRect(0,-4,10,2);ctx.fillRect(0,2,10,2);ctx.fillStyle=c;ctx.shadowBlur=10;ctx.shadowColor=c;ctx.fillRect(12,-2,5,4);ctx.shadowBlur=0;ctx.restore();
+ctx.fillStyle=c;ctx.font='bold 5px sans-serif';ctx.textAlign='center';ctx.fillText(p.id==='blue'?'01':'02',0,10);ctx.restore()}
+function draw(){ctx.save();if(shake>.2){ctx.translate(rand(-shake,shake),rand(-shake,shake));shake*=.82}ctx.fillStyle='#100e11';ctx.fillRect(-10,-10,W+20,H+20);
+for(let x=0;x<W;x+=36)for(let y=0;y<H;y+=36){ctx.fillStyle=((x+y)/36)%2?'#171316':'#1a1516';ctx.fillRect(x,y,35,35);ctx.strokeStyle='#282021';ctx.strokeRect(x,y,35,35)}
+for(let i=0;i<55;i++){let x=(i*137+Math.sin(time*.2+i)*22)%W,y=(i*71+time*(8+i%5))%H;ctx.fillStyle='rgba(203,151,112,.2)';ctx.fillRect(x,y,2,2)}
+obstacles.forEach(o=>{ctx.fillStyle='#30262a';ctx.fillRect(o.x,o.y,o.w,o.h);ctx.strokeStyle='#65453a';ctx.strokeRect(o.x,o.y,o.w,o.h);ctx.fillStyle='#4a3633';for(let x=o.x+7;x<o.x+o.w-3;x+=18)ctx.fillRect(x,o.y+3,3,Math.max(4,o.h-6))});
+shots.forEach(b=>{ctx.shadowBlur=13;ctx.shadowColor=b.color;ctx.fillStyle=b.color;ctx.beginPath();ctx.arc(b.x,b.y,b.r,0,7);ctx.fill();ctx.shadowBlur=0});
+enemies.forEach(e=>{ctx.save();ctx.translate(e.x,e.y);if(e===boss){ctx.shadowBlur=18;ctx.shadowColor='#a54b34';poly([[-24,-17],[-16,-29],[-5,-22],[5,-22],[16,-29],[24,-17],[20,12],[0,27],[-20,12]],'#514044','#a67b61',2);ctx.shadowBlur=0;poly([[-17,-19],[-34,-39],[-27,-12],[-15,-7]],'#a18b78');poly([[17,-19],[34,-39],[27,-12],[15,-7]],'#a18b78');ctx.shadowColor='#ff5b35';ctx.shadowBlur=15;ctx.fillStyle='#ff7547';ctx.fillRect(-13,-9,8,4);ctx.fillRect(5,-9,8,4);ctx.shadowBlur=0;ctx.strokeStyle='#d08c52';ctx.beginPath();ctx.moveTo(0,-17);ctx.lineTo(0,14);ctx.stroke()}else if(e.type==='wraith'){ctx.shadowBlur=10;ctx.shadowColor=e.color;poly([[0,-15],[12,-5],[11,10],[19,20],[2,15],[-12,23],[-9,8]],'#514b62','#8c88a6');ctx.fillStyle='#e2b88d';ctx.fillRect(-7,-3,4,3);ctx.fillRect(4,-3,4,3)}else{ctx.shadowBlur=10;ctx.shadowColor=e.color;ctx.fillStyle=e.type==='brute'?'#5d3933':'#3d3338';ctx.beginPath();ctx.arc(0,0,e.r,0,7);ctx.fill();ctx.strokeStyle='#9d7760';ctx.stroke();ctx.fillStyle='#df794c';ctx.fillRect(-6,-3,4,3);ctx.fillRect(3,-3,4,3)}ctx.restore();if(e!==boss){ctx.fillStyle='#38282a';ctx.fillRect(e.x-e.r,e.y-e.r-8,e.r*2,3);ctx.fillStyle='#b77b58';ctx.fillRect(e.x-e.r,e.y-e.r-8,e.r*2*Math.max(0,e.hp/e.max),3)}});
+players.forEach(robot);particles.forEach(p=>{ctx.globalAlpha=Math.max(0,p.life/p.max);ctx.fillStyle=p.color;ctx.beginPath();ctx.arc(p.x,p.y,p.r,0,7);ctx.fill()});ctx.globalAlpha=1;
+if(!playing&&!shopOpen&&!ended){ctx.fillStyle='#d8c0a4';ctx.font='bold 20px serif';ctx.textAlign='center';ctx.fillText('LAS TIERRAS MALDITAS',400,220)}if(paused){ctx.fillStyle='#080608cc';ctx.fillRect(0,0,W,H);ctx.fillStyle='#e6c8a4';ctx.font='bold 30px serif';ctx.textAlign='center';ctx.fillText('PAUSA',400,230)}ctx.restore()}
+function loop(now){let dt=Math.min(.035,(now-last)/1000||0);last=now;if(playing&&!paused&&!shopOpen)update(dt);draw();requestAnimationFrame(loop)}
+window.addEventListener('keydown',e=>{let k=e.key.length===1?e.key.toLowerCase():e.key;if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight',' '].includes(e.key))e.preventDefault();keys[k]=true});
+window.addEventListener('keyup',e=>keys[e.key.length===1?e.key.toLowerCase():e.key]=false);
+document.querySelectorAll('[data-key]').forEach(b=>{let k=b.dataset.key;b.addEventListener('pointerdown',e=>{e.preventDefault();touch[k]=true});['pointerup','pointercancel','pointerleave'].forEach(ev=>b.addEventListener(ev,e=>{e.preventDefault();touch[k]=false}))});
+layout();requestAnimationFrame(loop);
+})();
+</script>
+</body></html>
